@@ -1,0 +1,93 @@
+# Developing Kiali Operator
+
+The Kiali Operator lives in its link:https://github.com/kiali/kiali-operator[own git repository], but because it is necessary for Kiali developers to use it, the Kiali Operator repository is accessible in the link:https://github.com/kiali/kiali[Kiali git repo] via link:https://github.com/kiali/kiali/tree/master/operator[a subtree in the operator directory]. This makes it easy for Kiali devs to use the operator when working directly in the Kiali git repo. The Kiali git repo has all the necessary `make` targets to build, deploy, and test the Kiali Operator. This is very similiar to how things worked prior to moving the operator code to a separate git repo.
+
+The Kiali Operator git repo itself has a very small link:https://github.com/kiali/kiali-operator/blob/master/Makefile[Makefile] whose sole job is to build and push the Kiali Operator container image.
+
+## Introduction to Git Subtree
+
+There is no "subtree" command native to Git. There isn't a single "subtree" feature per se, rather, subtrees are more a concept than a feature. To use subtrees, you will rely on classic git commands you are already familiar with (mostly `merge` and `cherry-pick`).
+
+A good article (from which much of this material has been taken from) is "link:https://medium.com/@porteneuve/mastering-git-subtrees-943d29a798ec[Mastering Git subtrees]" by Christophe Porteneuve. GitHub has a link:https://help.github.com/en/github/using-git/about-git-subtree-merges[subtree help page] also.
+
+## Developing Kiali Operator While Working In Kiali Git Repo
+
+As in the past, Kiali developers can continue developing Kiali Operator features and bug fixes while working in the Kiali repo. So from a development perspective, the git repo the Kiali developer continues to work in remains the Kiali git repo. In fact, if you are merely a consumer of the Kiali Operator code (that is, you do not plan on ever making any changes or commits to the operator code) you can stop reading now. Nothing changes in the way you work.
+
+If, however, a developer needs to make changes to the operator, because the Kiali Operator code really lives in a separate repo, the developer will need to create PRs to the Kiali Operator git repo (just like any other git repo you want to commit to). This is not difficult and uses the same basic workflow and commands that the developers are used to using already when creating PRs.
+
+First, if you plan on making changes to the Kiali Operator then you need to fork the Kiali Operator git repo using the normal GitHub fork method. You then need to add a git remote in your local Kiali git repo that points to your Kiali Operator fork. Similarly, add another git remote that references the main Kiali Operator git repo. You should notice this is not much different than how you set up your remotes when doing development for any other git repo:
+
+```
+git remote add -f opfork git@github.com:<your github username>/kiali-operator.git
+git remote add -f op git@github.com:kiali/kiali-operator.git
+```
+
+Let's assume you are a developer that is writing code that changes the Kiali Operator. Make your changes and commit them to your local Kiali git repo normally. Once a commit is completed, then a Kiali PR needs to be created normally.
+
+NOTE: This work need not be solely within the bounds of the Kiali Operator code - the developer is free to change and commit changes to both operator and non-operator code even within the same commit!
+
+The new operator code needs to be pushed up to the Kiali Operator git repo via a separate PR. To create this PR is not very different than creating any other PR. First, create a local branch based on the remote Kiali Operator branch you want to commit to. For example, if you will need to commit changes to the Kiali Operator master branch, use this typical checkout command:
+
+```
+git checkout -b kiali-operator-update op/master
+```
+
+This creates a local branch `kiali-operator-update` with its HEAD currently at the Kiali Operator `master` branch. It is probably best that you fetch the latest operator code (`git fetch op`) prior to checking out the branch.
+
+At this point, you only have to cherry pick the commits that contain operator code changes (and remember, those commits do not have to exclusively change operator code - if non-operator code was also changed within the commit, the following cherry pick command or merge will filter those out):
+
+```
+git cherry-pick --strategy subtree -Xsubtree=operator <the commit or branch>
+```
+
+NOTE: You can cherry pick individual commits or multiple commits from a branch.
+
+Now push your branch to your Kiali Operator fork from which you can create a PR:
+
+```
+git push opfork kiali-operator-update
+```
+
+## Keeping the Subtree Up To Date Within the Kiali Git Repo
+
+As changes are made to the Kiali Operator, we will want to update the Kiali git repo subtree with those changes. This is done by merging the changes from the Kiali Operator git repo into the subtree.
+
+NOTE: The steps below only need to be performed if changes were made directly in the Kiali Operator git repo and they need to be pulled down into the Kiali git repo subtree. If changes were committed to the Kiali git repo and subsequently pushed up to the Kiali Operator git repo (using the instructions in the previous section) then none of the instructions below need to be done since the Kiali git repo is already up to date and all consumers will get those updates via the normal `git pull` of the Kiali git repo.
+
+To pull changes from the Kiali Operator git repo down into the Kiali git repo subtree:
+
+1. You must have already added a remote referencing the Kiali Operator repo within your local Kiali git repo: `git remote add -f op git@github.com:kiali/kiali-operator.git`
+2. Ensure you have the latest Kiali Operator updates: `git fetch op`
+3. Merge those changes into your Kiali git repo: `git merge --strategy=subtree -Xsubtree=operator --squash --allow-unrelated-histories op/master`
+4. If the changes within the Kiali Operator git repo require additional changes in non-operator code within the Kiali git repo, you can optionally make those changes now.
+5. Commit the changes: `git commit -m "Update Kiali Operator"`
+
+NOTE: You may not need to specify `--strategy=subtree` in the merge in step 3. This would merge with the default `recursive` strategy.
+
+NOTE: The `git merge` command mentioned above will squash and require you to perform a separate `git commit`. An alternative is to use `git pull` without squashing. This will place a merge commit in the history, but the benefits to this method is you do not have to perform a separate `git commit` and the merge commit message provides an explicit indication of which branch and repo the code came from: `git pull --strategy=subtree -Xsubtree=operator --allow-unrelated-histories op master`
+
+NOTE: Without `-Xsubtree=operator` it is possible for Git to not be able to figure out where the subtree directory is. When this happens, it causes the merge to get all confused resulting in unrelated directories/files changing. For this reason, always specify where the subtree directory is via `-Xsubtree=operator`.
+
+NOTE: As you can see in the `git merge` command, you can merge a particular branch of the Kiali Operator git repo. In step 3, it shows a merge of the "op/master" branch. But if, for example, you are on a particular branch within the Kiali git repo and you want to pull in a specific branch of Kiali Operator, you can do so by simply specifying the branch you want to merge.
+
+## The Initial Kiali Operator Git Repo and Kiali Git Repo Subtree Creation
+
+This section documents how the Kiali Operator git repo and the subtree within the Kiali git repo was originally created. This only had to be performed one time and one time only. Developers and consumers of Kiali and Kiali Operator do not need to know any of this, so you can skip this section.
+
+The new Kiali Operator git repo was created with a single file in its initial commit. Once a repo is created, we then needed to populate it with the original operator code from the Kiali git repo while retaining all history. Here is how to do it.
+
+1. In the Kiali git repo, add a remote pointing to the new Kiali Operator git repo: `git remote add -f op git@github.com:kiali/kiali-operator.git`
+2. Create a new branch that will be used to populate the new Kiali Operator git repo: `git checkout -b split-operator-master origin/master`
+3. Extract only the operator files retaining all history: `git filter-branch --subdirectory-filter operator`
+4. Push the operator files to the Kiali Operator git repo's master branch: `git push --force -u op split-operator-master:master`
+5. Merge the subtree into the Kiali repo and push: `git checkout master && git merge --strategy=subtree -Xsubtree=operator --allow-unrelated-histories op/master && git push origin master`
+
+Those steps push the `master` branch of operator to the Kiali Operator git repo. Analogous steps can be done for other branches (e.g `v1.0` or `v1.12`).
+
+At this point, there is no need to replace the `operator` subdirectory in master with the result of a `git read-tree`. It currently looks the same (including history) with that of the Kiali Operator git repo master branch. However, this is how you would use `git read-tree` to inject a subtree for an `operator` directory in any git repo.
+
+1. Delete any existing `operator` directory so it gets out of the way of the new subtree: `rm -rf operator && git commit -am "Remove operator to prepare for subtree"`
+2. Create the subtree so the `operator` directory is populated with the Kiali Operator git repo's master branch: `git read-tree --prefix=operator -u op/master`
+3. Commit the change: `git commit -m "Added operator subtree"`
+
