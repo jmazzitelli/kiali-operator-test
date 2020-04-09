@@ -1,4 +1,5 @@
 ---
+# MAZZ WAS HERE
 - version: v1alpha1
   group: kiali.io
   kind: Kiali
